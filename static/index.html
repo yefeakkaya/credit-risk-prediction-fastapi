@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kredi Risk ve Temerrüt Tahmin Sistemi</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏦 Kredi Risk & Temerrüt Karar Destek Sistemi</h1>
+            <p>Müşteri bilgilerini girerek yapay zeka modeli ile temerrüt (batık) olasılığını analiz edin.</p>
+            <div class="demo-buttons">
+                <button type="button" class="btn-safe" onclick="fillDemo('safe')">✅ Örnek Güvenli Müşteri Doldur</button>
+                <button type="button" class="btn-risky" onclick="fillDemo('risky')">⚠️ Örnek Riskli Müşteri Doldur</button>
+            </div>
+        </header>
+
+        <form id="creditForm">
+            <div class="grid">
+                <div class="form-group">
+                    <label>Müşteri Yaşı (person_age)</label>
+                    <input type="number" id="person_age" value="28" min="18" max="90" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Yıllık Gelir - $ (person_income)</label>
+                    <input type="number" id="person_income" value="65000" min="1000" step="any" oninput="calcRatio()" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Çalışma Süresi - Yıl (Bilinmiyorsa boş bırakın)</label>
+                    <input type="number" id="person_emp_length" value="5" min="0" max="60" step="any" placeholder="Boş bırakılırsa medyan atanır">
+                </div>
+
+                <div class="form-group">
+                    <label>Ev Sahipliği Durumu (person_home_ownership)</label>
+                    <select id="person_home_ownership">
+                        <option value="RENT">Kiracı (RENT)</option>
+                        <option value="MORTGAGE" selected>İpotekli Ev Sahibi (MORTGAGE)</option>
+                        <option value="OWN">Kendi Evi (OWN)</option>
+                        <option value="OTHER">Diğer (OTHER)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Kredi Amacı (loan_intent)</label>
+                    <select id="loan_intent">
+                        <option value="PERSONAL">Kişisel İhtiyaç (PERSONAL)</option>
+                        <option value="EDUCATION" selected>Eğitim (EDUCATION)</option>
+                        <option value="MEDICAL">Sağlık (MEDICAL)</option>
+                        <option value="VENTURE">Girişim / Yatırım (VENTURE)</option>
+                        <option value="HOMEIMPROVEMENT">Ev Tadilatı (HOMEIMPROVEMENT)</option>
+                        <option value="DEBTCONSOLIDATION">Borç Kapatma (DEBTCONSOLIDATION)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Banka Kredi Derecesi (loan_grade)</label>
+                    <select id="loan_grade">
+                        <option value="A">A (En Düşük Risk)</option>
+                        <option value="B" selected>B (Düşük Risk)</option>
+                        <option value="C">C (Orta Risk)</option>
+                        <option value="D">D (Orta-Yüksek Risk)</option>
+                        <option value="E">E (Yüksek Risk)</option>
+                        <option value="F">F (Çok Yüksek Risk)</option>
+                        <option value="G">G (En Riskli Grup)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Talep Edilen Kredi Tutarı - $ (loan_amnt)</label>
+                    <input type="number" id="loan_amnt" value="10000" min="500" step="any" oninput="calcRatio()" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Faiz Oranı - % (Bilinmiyorsa boş bırakın)</label>
+                    <input type="number" id="loan_int_rate" value="10.5" min="1" max="35" step="any" placeholder="Boş bırakılırsa medyan atanır">
+                </div>
+
+                <div class="form-group">
+                    <label>Kredi / Gelir Oranı (loan_percent_income)</label>
+                    <input type="number" id="loan_percent_income" value="0.15" step="any" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Geçmişte Temerrüt Kaydı Var mı?</label>
+                    <select id="cb_person_default_on_file">
+                        <option value="N" selected>Hayır (N)</option>
+                        <option value="Y">Evet (Y)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Kredi Geçmişi Uzunluğu - Yıl</label>
+                    <input type="number" id="cb_person_cred_hist_length" value="6" min="0" max="50" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-submit">Kredi Riskini Analiz Et</button>
+        </form>
+
+        <div id="resultCard" class="result-card hidden">
+            <h2 id="resultStatus"></h2>
+            <div class="metrics">
+                <div class="metric-box">
+                    <span>Temerrüt (Batık) Olasılığı</span>
+                    <strong id="probValue"></strong>
+                </div>
+                <div class="metric-box">
+                    <span>Model Karar Eşiği (Threshold)</span>
+                    <strong id="threshValue"></strong>
+                </div>
+                <div class="metric-box">
+                    <span>Aktif Model</span>
+                    <strong id="modelName"></strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function calcRatio() {
+            const income = parseFloat(document.getElementById('person_income').value) || 1;
+            const loan = parseFloat(document.getElementById('loan_amnt').value) || 0;
+            document.getElementById('loan_percent_income').value = (loan / income).toFixed(2);
+        }
+
+        function fillDemo(type) {
+            if (type === 'safe') {
+                document.getElementById('person_age').value = 32;
+                document.getElementById('person_income').value = 85000;
+                document.getElementById('person_emp_length').value = 8;
+                document.getElementById('person_home_ownership').value = 'OWN';
+                document.getElementById('loan_intent').value = 'VENTURE';
+                document.getElementById('loan_grade').value = 'A';
+                document.getElementById('loan_amnt').value = 8000;
+                document.getElementById('loan_int_rate').value = 7.5;
+                document.getElementById('cb_person_default_on_file').value = 'N';
+                document.getElementById('cb_person_cred_hist_length').value = 9;
+            } else {
+                document.getElementById('person_age').value = 22;
+                document.getElementById('person_income').value = 28000;
+                document.getElementById('person_emp_length').value = 1;
+                document.getElementById('person_home_ownership').value = 'RENT';
+                document.getElementById('loan_intent').value = 'DEBTCONSOLIDATION';
+                document.getElementById('loan_grade').value = 'E';
+                document.getElementById('loan_amnt').value = 15000;
+                document.getElementById('loan_int_rate').value = 17.8;
+                document.getElementById('cb_person_default_on_file').value = 'Y';
+                document.getElementById('cb_person_cred_hist_length').value = 2;
+            }
+            calcRatio();
+        }
+
+        document.getElementById('creditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                person_age: parseInt(document.getElementById('person_age').value),
+                person_income: parseFloat(document.getElementById('person_income').value),
+                person_home_ownership: document.getElementById('person_home_ownership').value,
+                person_emp_length: document.getElementById('person_emp_length').value === "" ? null : parseFloat(document.getElementById('person_emp_length').value),
+                loan_intent: document.getElementById('loan_intent').value,
+                loan_grade: document.getElementById('loan_grade').value,
+                loan_amnt: parseFloat(document.getElementById('loan_amnt').value),
+                loan_int_rate: document.getElementById('loan_int_rate').value === "" ? null : parseFloat(document.getElementById('loan_int_rate').value),
+                loan_percent_income: parseFloat(document.getElementById('loan_percent_income').value),
+                cb_person_default_on_file: document.getElementById('cb_person_default_on_file').value,
+                cb_person_cred_hist_length: parseInt(document.getElementById('cb_person_cred_hist_length').value)
+            };
+
+            const res = await fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+
+            const card = document.getElementById('resultCard');
+            card.classList.remove('hidden', 'approved', 'rejected');
+            card.classList.add(result.prediction === 1 ? 'rejected' : 'approved');
+
+            document.getElementById('resultStatus').innerText = result.status;
+            document.getElementById('probValue').innerText = `%${result.probability}`;
+            document.getElementById('threshValue').innerText = `%${result.threshold}`;
+            document.getElementById('modelName').innerText = result.model_name;
+        });
+    </script>
+</body>
+</html>
